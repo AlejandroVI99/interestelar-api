@@ -7,4 +7,20 @@ Rails.application.routes.draw do
 
   # Defines the root path route ("/")
   # root "posts#index"
+
+  namespace :api do
+    namespace :v1 do
+      # Items de Loyverse
+      resources :items, only: [:index, :show]
+      
+      # Pagos
+      resources :payments, only: [:index, :show] do
+        collection do
+          post :process_payment_with_token
+          post :process_payment_with_method
+          get 'user/:user_id', action: :by_user, as: :user
+        end
+      end
+    end
+  end
 end
