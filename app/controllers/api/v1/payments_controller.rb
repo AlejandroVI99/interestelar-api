@@ -50,7 +50,23 @@ class Api::V1::PaymentsController < ApplicationController
       )
 
       Rails.logger.info "Payment #{payment.id} created for user #{params[:user_id]}"
-
+      if payment_intent.status == 'succeeded'
+        # Hacer broadcast a la cocina
+        ActionCable.server.broadcast('kitchen_orders', {
+          type: 'new_order',
+          order: {
+            id: payment.id,
+            item_name: payment.item_name,
+            item_data: payment.item_data,
+            amount: payment.amount / 100.0,
+            user_id: payment.user_id,
+            created_at: payment.created_at,
+            status: 'pending'
+          }
+        })
+        
+        Rails.logger.info "New order broadcasted to kitchen: #{payment.id}"
+      end
       render_success({
         payment_id: payment.id,
         payment_intent_id: payment_intent.id,
@@ -82,7 +98,6 @@ class Api::V1::PaymentsController < ApplicationController
 
       amount = calculate_amount(params[:amount] || item['default_price'] || 10.0)
 
-      # ✅ SIN return_url - funciona perfecto para tarjetas
       payment_intent = Stripe::PaymentIntent.create({
         amount: amount,
         currency: 'usd',
@@ -111,6 +126,21 @@ class Api::V1::PaymentsController < ApplicationController
         confirmed_at: payment_intent.status == 'succeeded' ? Time.current : nil,
         metadata: payment_intent.metadata.to_h
       )
+
+      if payment_intent.status == 'succeeded'
+        ActionCable.server.broadcast('kitchen_orders', {
+          type: 'new_order',
+          order: {
+            id: payment.id,
+            item_name: payment.item_name,
+            item_data: payment.item_data,
+            amount: payment.amount_in_currency,
+            user_id: payment.user_id,
+            created_at: payment.created_at,
+            status: 'pending' # pending, in_progress, completed
+          }
+        })
+      end
 
       render_success({
         payment_id: payment.id,
