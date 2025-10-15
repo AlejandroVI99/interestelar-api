@@ -23,6 +23,17 @@ class Api::V1::ItemsController < ApplicationController
     end
   end
 
+  # GET /api/v1/items/modifiers
+  def modifiers
+    modifiers = @loyverse_service.get_modifiers
+    
+    if modifiers
+      render_success({ modifiers: modifiers }, "Modificadores obtenidos exitosamente")
+    else
+      render_error("No se pudieron obtener los modificadores", :service_unavailable)
+    end
+  end
+
   private
 
   def initialize_loyverse_service

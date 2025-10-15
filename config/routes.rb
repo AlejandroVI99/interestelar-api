@@ -11,7 +11,11 @@ Rails.application.routes.draw do
   namespace :api do
     namespace :v1 do
       # Items de Loyverse
-      resources :items, only: [:index, :show]
+      resources :items, only: [:index, :show] do
+        collection do
+          get 'modifiers'
+        end
+      end
       
       # Pagos
       resources :payments, only: [:index, :show] do

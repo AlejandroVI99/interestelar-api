@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.0].define(version: 2025_10_01_150043) do
+ActiveRecord::Schema[8.0].define(version: 2025_10_15_182001) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "pg_catalog.plpgsql"
 
@@ -27,11 +27,17 @@ ActiveRecord::Schema[8.0].define(version: 2025_10_01_150043) do
     t.datetime "confirmed_at", precision: nil
     t.datetime "created_at", null: false
     t.datetime "updated_at", null: false
+    t.string "receipt_number"
+    t.string "loyverse_receipt_id"
+    t.jsonb "modifiers", default: []
     t.index ["confirmed_at"], name: "index_payments_on_confirmed_at"
     t.index ["created_at"], name: "index_payments_on_created_at"
     t.index ["item_data"], name: "index_payments_on_item_data", using: :gin
     t.index ["item_id"], name: "index_payments_on_item_id"
+    t.index ["loyverse_receipt_id"], name: "index_payments_on_loyverse_receipt_id"
     t.index ["metadata"], name: "index_payments_on_metadata", using: :gin
+    t.index ["modifiers"], name: "index_payments_on_modifiers", using: :gin
+    t.index ["receipt_number"], name: "index_payments_on_receipt_number"
     t.index ["status"], name: "index_payments_on_status"
     t.index ["stripe_payment_intent_id"], name: "index_payments_on_stripe_payment_intent_id", unique: true
     t.index ["user_id"], name: "index_payments_on_user_id"

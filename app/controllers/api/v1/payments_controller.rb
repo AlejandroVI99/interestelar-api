@@ -96,11 +96,11 @@ class Api::V1::PaymentsController < ApplicationController
       payment_method_id = params[:payment_method_id]
       return render_error('Payment Method ID requerido') if payment_method_id.blank?
 
-      amount = calculate_amount(params[:amount] || item['default_price'] || 10.0)
+      amount = calculate_amount(params[:price])
 
       payment_intent = Stripe::PaymentIntent.create({
         amount: amount,
-        currency: 'usd',
+        currency: 'MXN',
         payment_method: payment_method_id,
         confirm: true,
         automatic_payment_methods: {
@@ -123,33 +123,55 @@ class Api::V1::PaymentsController < ApplicationController
         item_name: item['item_name'],
         item_data: item,
         user_id: params[:user_id],
+        modifiers: params[:modifiers] || [],
         confirmed_at: payment_intent.status == 'succeeded' ? Time.current : nil,
         metadata: payment_intent.metadata.to_h
       )
 
       if payment_intent.status == 'succeeded'
-        ActionCable.server.broadcast('kitchen_orders', {
-          type: 'new_order',
-          order: {
-            id: payment.id,
-            item_name: payment.item_name,
-            item_data: payment.item_data,
-            amount: payment.amount_in_currency,
-            user_id: payment.user_id,
-            created_at: payment.created_at,
-            status: 'pending' # pending, in_progress, completed
-          }
+        loyverse_receipt = @loyverse_service.create_receipt({
+          item_id: params[:item_id],
+          variant_id: params[:variant_id],
+          price: params[:price],
+          modifiers: params[:modifiers],
+          total_amount: params[:price],
+          user_id: params[:user_id],
+          payment_intent_id: payment_intent.id
         })
+
+        if loyverse_receipt
+          payment.update!(
+            receipt_number: loyverse_receipt['receipt_number'],
+            loyverse_receipt_id: loyverse_receipt['receipt_id']
+          )
+
+          ActionCable.server.broadcast('kitchen_orders', {
+            type: 'new_order',
+            order: {
+              id: payment.id,
+              order_number: loyverse_receipt['receipt_number'],
+              item_name: payment.item_name,
+              modifiers: payment.modifiers,
+              amount: payment.amount / 100.0,
+              user_id: payment.user_id,
+              created_at: payment.created_at,
+              status: 'pending'
+            }
+          })
+          
+          Rails.logger.info "Order #{loyverse_receipt['receipt_number']} sent to kitchen"
+        else
+          Rails.logger.warn "Payment successful but Loyverse receipt failed for payment #{payment.id}"
+        end
       end
 
       render_success({
         payment_id: payment.id,
         payment_intent_id: payment_intent.id,
-        client_secret: payment_intent.client_secret,
+        order_number: payment.receipt_number,
         status: payment_intent.status,
         amount: payment.amount_in_currency,
-        currency: payment.currency,
-        requires_action: payment_intent.status == 'requires_action'
+        currency: payment.currency
       }, payment_status_message(payment_intent.status))
 
     rescue Stripe::CardError => e
@@ -158,6 +180,7 @@ class Api::V1::PaymentsController < ApplicationController
       render_error("Error de Stripe: #{e.message}")
     rescue => e
       Rails.logger.error "Payment error: #{e.message}"
+      Rails.logger.error e.backtrace.join("\n")
       render_error("Error al procesar pago: #{e.message}")
     end
   end
