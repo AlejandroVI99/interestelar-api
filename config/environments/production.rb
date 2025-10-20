@@ -66,4 +66,16 @@ Rails.application.configure do
 
   # Permitir todos los hosts (necesario para Heroku)
   config.hosts.clear
+
+  config.action_cable.url = "wss://interestelar-api-81ce56179d2a.herokuapp.com/cable"
+
+  config.action_cable.allowed_request_origins = [
+    'http://localhost:5173',
+    'http://localhost:5174',
+    'http://localhost:3000',
+    /https:\/\/.*/,
+    /http:\/\/.*/  
+  ]
+
+  config.action_cable.disable_request_forgery_protection = true
 end
