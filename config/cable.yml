@@ -11,7 +11,5 @@ test:
 
 production:
   adapter: redis
-  url: <%= ENV['REDIS_URL']&.sub(/^redis:/, 'rediss:') || "redis://localhost:6379/1" %>
+  url: <%= ENV['REDIS_URL'] %>
   channel_prefix: interestelar_api_production
-  ssl_params:
-    verify_mode: none
