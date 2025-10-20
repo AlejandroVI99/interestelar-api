@@ -16,8 +16,8 @@ gem "puma", ">= 5.0"
 gem "tzinfo-data", platforms: %i[ windows jruby ]
 
 # Use the database-backed adapters for Rails.cache, Active Job, and Action Cable
-gem "solid_cache"
-gem "solid_queue"
+#gem "solid_cache"
+#gem "solid_queue"
 gem "solid_cable"
 gem 'stripe'
 gem 'httparty'
