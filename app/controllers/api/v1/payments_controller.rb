@@ -90,13 +90,31 @@ class Api::V1::PaymentsController < ApplicationController
   # POST /api/v1/payments/process_with_method
   def process_payment_with_method
     begin
-      item = @loyverse_service.get_item(params[:item_id])
-      return render_error('Artículo no encontrado') unless item
+      # params[:items] puede ser un array o un objeto single
+      items_array = params[:items].is_a?(Array) ? params[:items] : [params[:items]]
+      
+      # Validar que todos los items existan en Loyverse
+      items_data = items_array.map do |item_params|
+        item = @loyverse_service.get_item(item_params[:item_id])
+        return render_error("Artículo #{item_params[:item_id]} no encontrado") unless item
+
+        {
+          loyverse_data: item,
+          item_id: item_params[:item_id],
+          variant_id: item_params[:variant_id],
+          quantity: item_params[:quantity] || 1,
+          price: item_params[:price],
+          modifiers: item_params[:modifiers] || [],
+          store_id: item_params[:store_id]
+        }
+      end
 
       payment_method_id = params[:payment_method_id]
       return render_error('Payment Method ID requerido') if payment_method_id.blank?
 
-      amount = calculate_amount(params[:price])
+      # Calcular el total de todos los items
+      total_price = params[:total_price] # El frontend ya calculó el total
+      amount = calculate_amount(total_price)
 
       payment_intent = Stripe::PaymentIntent.create({
         amount: amount,
@@ -108,35 +126,43 @@ class Api::V1::PaymentsController < ApplicationController
           allow_redirects: 'never'
         },
         metadata: {
-          item_id: params[:item_id],
-          item_name: item['item_name'],
+          item_count: items_data.length,
           user_id: params[:user_id]
         }
       })
 
+      # Guardar el payment con todos los items
       payment = Payment.create!(
         stripe_payment_intent_id: payment_intent.id,
         amount: payment_intent.amount,
         currency: payment_intent.currency,
         status: map_stripe_status(payment_intent.status),
-        item_id: params[:item_id],
-        item_name: item['item_name'],
-        item_data: item,
+        item_id: items_data.first[:item_id], # Primary item
+        item_name: items_data.first[:loyverse_data]['item_name'],
+        item_data: { items: items_data }, # Guardar todos los items
         user_id: params[:user_id],
-        modifiers: params[:modifiers] || [],
+        modifiers: items_data.flat_map { |i| i[:modifiers] }, # Todos los modificadores
         confirmed_at: payment_intent.status == 'succeeded' ? Time.current : nil,
         metadata: payment_intent.metadata.to_h
       )
 
       if payment_intent.status == 'succeeded'
+        # Crear receipt en Loyverse con todos los items
         loyverse_receipt = @loyverse_service.create_receipt({
-          item_id: params[:item_id],
-          variant_id: params[:variant_id],
-          price: params[:price],
-          modifiers: params[:modifiers],
-          total_amount: params[:price],
+          items: items_data.map do |item|
+            {
+              item_id: item[:item_id],
+              variant_id: item[:variant_id],
+              quantity: item[:quantity],
+              price: item[:price],
+              modifiers: item[:modifiers]
+              
+            }
+          end,
+          total_amount: total_price,
           user_id: params[:user_id],
-          payment_intent_id: payment_intent.id
+          payment_intent_id: payment_intent.id,
+          store_id: items_data.first[:store_id]
         })
 
         if loyverse_receipt
@@ -145,13 +171,19 @@ class Api::V1::PaymentsController < ApplicationController
             loyverse_receipt_id: loyverse_receipt['receipt_id']
           )
 
+          # Broadcast a la cocina con todos los items
           ActionCable.server.broadcast('kitchen_orders', {
             type: 'new_order',
             order: {
               id: payment.id,
               order_number: loyverse_receipt['receipt_number'],
-              item_name: payment.item_name,
-              modifiers: payment.modifiers,
+              items: items_data.map do |item|
+                {
+                  item_name: item[:loyverse_data]['item_name'],
+                  quantity: item[:quantity],
+                  modifiers: item[:modifiers]
+                }
+              end,
               amount: payment.amount / 100.0,
               user_id: payment.user_id,
               created_at: payment.created_at,
@@ -159,7 +191,7 @@ class Api::V1::PaymentsController < ApplicationController
             }
           })
           
-          Rails.logger.info "Order #{loyverse_receipt['receipt_number']} sent to kitchen"
+          Rails.logger.info "Order #{loyverse_receipt['receipt_number']} sent to kitchen with #{items_data.length} items"
         else
           Rails.logger.warn "Payment successful but Loyverse receipt failed for payment #{payment.id}"
         end
@@ -171,7 +203,8 @@ class Api::V1::PaymentsController < ApplicationController
         order_number: payment.receipt_number,
         status: payment_intent.status,
         amount: payment.amount_in_currency,
-        currency: payment.currency
+        currency: payment.currency,
+        items_count: items_data.length
       }, payment_status_message(payment_intent.status))
 
     rescue Stripe::CardError => e

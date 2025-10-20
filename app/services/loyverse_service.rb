@@ -48,27 +48,30 @@ class LoyverseService
 
   # Crear receipt
   def create_receipt(payment_data)
-    # Construir line_modifiers con el formato correcto
-    line_modifiers = payment_data[:modifiers]&.map do |mod|
-      {
-        modifier_option_id: mod['modifier_option_id'], # REQUERIDO por Loyverse
-        quantity: 1
-      }
-    end || []
+    # payment_data[:items] es un array de items
+    # Cada item tiene: item_id, variant_id, quantity, price, modifiers
+    line_items = payment_data[:items].map do |item|
+      line_modifiers = item[:modifiers]&.map do |mod|
+        {
+          modifier_option_id: mod['modifier_option_id'],
+          quantity: mod['quantity'] || 1
+        }
+      end || []
 
-    line_items = [{
-      item_id: payment_data[:item_id],
-      variant_id: payment_data[:variant_id], # IMPORTANTE: Agregar variant_id
-      quantity: 1,
-      price: payment_data[:price],
-      line_modifiers: line_modifiers
-    }]
+      {
+        item_id: item[:item_id],
+        variant_id: item[:variant_id],
+        quantity: item[:quantity] || 1,
+        price: item[:price],
+        line_modifiers: line_modifiers
+      }
+    end
 
     body = {
       source: "API",
-      receipt_type: "SELL",
+      receipt_type: "SALE",
       created_at: Time.current.iso8601,
-      store_id: @store_id.present? ? @store_id : "nil",
+      store_id: payment_data[:store_id],
       line_items: line_items,
       payments: [{
         payment_type_id: ENV['LOYVERSE_CARD_PAYMENT_TYPE_ID'],
