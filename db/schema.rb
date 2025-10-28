@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.0].define(version: 2025_10_15_182001) do
+ActiveRecord::Schema[8.0].define(version: 2025_10_28_182028) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "pg_catalog.plpgsql"
 
@@ -19,7 +19,7 @@ ActiveRecord::Schema[8.0].define(version: 2025_10_15_182001) do
     t.string "stripe_payment_intent_id", null: false
     t.integer "amount", null: false
     t.string "currency"
-    t.integer "status", default: 0
+    t.string "status", default: "0"
     t.string "item_id", null: false
     t.string "item_name", null: false
     t.jsonb "item_data"
