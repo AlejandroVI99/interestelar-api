@@ -143,7 +143,7 @@ class Api::V1::PaymentsController < ApplicationController
         user_id: params[:user_id],
         modifiers: items_data.flat_map { |i| i[:modifiers] }, # Todos los modificadores
         confirmed_at: payment_intent.status == 'succeeded' ? Time.current : nil,
-        metadata: payment_intent.metadata.to_h
+        metadata: payment_intent.metadata.to_h.merge('kitchen_status' => 'pending') 
       )
 
       if payment_intent.status == 'succeeded'
